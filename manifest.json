@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "스토브 에디터 실행취소",
+  "version": "1.0.0",
+  "description": "스토브 커뮤니티 에디터에서 Ctrl+Z(실행취소) 기능을 활성화합니다",
+  "permissions": ["storage", "activeTab"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "스토브 에디터 실행취소",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://cafe.naver.com/*", "*://*.onstove.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

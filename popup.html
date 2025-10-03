@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스토브 에디터 실행취소</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 320px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .container {
+            padding: 24px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .toggle-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .toggle-label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 26px;
+            transition: 0.3s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+
+        input:checked + .slider {
+            background-color: #4ade80;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        .status {
+            text-align: center;
+            font-size: 13px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .status.active {
+            background: rgba(74, 222, 128, 0.2);
+            border-color: #4ade80;
+        }
+
+        .status.inactive {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+        }
+
+        .info-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 16px;
+            font-size: 12px;
+            line-height: 1.6;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .info-section h3 {
+            font-size: 13px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .info-section ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .info-section li {
+            padding: 4px 0;
+            padding-left: 16px;
+            position: relative;
+        }
+
+        .info-section li:before {
+            content: "•";
+            position: absolute;
+            left: 4px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 11px;
+            opacity: 0.7;
+        }
+
+        .reload-notice {
+            background: rgba(251, 191, 36, 0.2);
+            border: 1px solid rgba(251, 191, 36, 0.5);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 12px;
+            font-size: 11px;
+            text-align: center;
+            display: none;
+        }
+
+        .reload-notice.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⌨️ 스토브 에디터 실행취소</h1>
+            <p>Ctrl+Z 기능 활성화</p>
+        </div>
+
+        <div class="status" id="status">
+            확인 중...
+        </div>
+
+        <div class="toggle-section">
+            <div class="toggle-row">
+                <span class="toggle-label">기능 활성화</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggleSwitch">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="reload-notice" id="reloadNotice">
+            ⚠️ 변경사항을 적용하려면 페이지를 새로고침하세요
+        </div>
+
+        <div class="info-section">
+            <h3>📌 사용법</h3>
+            <ul>
+                <li><strong>Ctrl+Z</strong>: 실행취소</li>
+                <li><strong>Ctrl+Y</strong> 또는 <strong>Ctrl+Shift+Z</strong>: 다시실행</li>
+                <li>최대 50개 히스토리 저장</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            v1.0.0 | Made for Stove Community
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
