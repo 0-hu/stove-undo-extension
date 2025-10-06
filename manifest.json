@@ -3,7 +3,7 @@
   "name": "스토브 에디터 실행취소",
   "version": "1.0.0",
   "description": "스토브 커뮤니티 에디터에서 Ctrl+Z(실행취소) 기능을 활성화합니다",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "스토브 에디터 실행취소",
