@@ -176,9 +176,11 @@ function startExtension() {
 
     console.log('스토브 에디터 실행취소 기능 활성화됨');
 
-    // 초기 상태 저장
-    const initialContent = historyManager.getContent(editor);
-    historyManager.saveState(initialContent, editor);
+    // 초기 상태 저장 (편집 모드에서 컨텐츠가 로드될 시간을 주기 위해 지연)
+    setTimeout(() => {
+      const initialContent = historyManager.getContent(editor);
+      historyManager.saveState(initialContent, editor);
+    }, 500);
 
     // 입력 이벤트 리스너
     const handleInput = () => {
