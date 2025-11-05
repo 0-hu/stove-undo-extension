@@ -242,6 +242,21 @@ function initializeEditorUndo() {
 }
 
 function startExtension() {
+  // 설정 로드
+  let settings = {
+    maxHistorySize: 150,
+    debounceTime: 100,
+    showUIButtons: true
+  };
+
+  // 설정 불러오기
+  chrome.storage.sync.get(['maxHistorySize', 'debounceTime', 'showUIButtons'], (result) => {
+    if (result.maxHistorySize) settings.maxHistorySize = result.maxHistorySize;
+    if (result.debounceTime !== undefined) settings.debounceTime = result.debounceTime;
+    if (result.showUIButtons !== undefined) settings.showUIButtons = result.showUIButtons;
+    console.log('설정 로드:', settings);
+  });
+
   // 각 에디터별 히스토리 관리자를 WeakMap으로 관리
   const editorHistoryMap = new WeakMap();
   const editorTimeouts = new WeakMap();
@@ -252,9 +267,122 @@ function startExtension() {
   // 에디터의 히스토리 관리자 가져오기 또는 생성
   function getHistoryManager(editor) {
     if (!editorHistoryMap.has(editor)) {
-      editorHistoryMap.set(editor, new EditorHistoryManager());
+      const manager = new EditorHistoryManager();
+      manager.maxHistorySize = settings.maxHistorySize;
+      editorHistoryMap.set(editor, manager);
     }
     return editorHistoryMap.get(editor);
+  }
+
+  // UI 버튼 생성 및 업데이트
+  function createUndoRedoUI(editor) {
+    // 설정에서 UI 버튼 표시가 비활성화되어 있으면 스킵
+    if (!settings.showUIButtons) return;
+
+    // 이미 UI가 있으면 스킵
+    if (editor.querySelector('.stove-undo-ui')) return;
+
+    const container = document.createElement('div');
+    container.className = 'stove-undo-ui';
+    container.style.cssText = `
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 4px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 4px;
+      padding: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    `;
+
+    // Undo 버튼
+    const undoBtn = document.createElement('button');
+    undoBtn.className = 'stove-undo-btn';
+    undoBtn.innerHTML = '↶';
+    undoBtn.title = '실행취소 (Ctrl+Z)';
+    undoBtn.style.cssText = `
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: white;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    `;
+
+    // Redo 버튼
+    const redoBtn = document.createElement('button');
+    redoBtn.className = 'stove-redo-btn';
+    redoBtn.innerHTML = '↷';
+    redoBtn.title = '다시실행 (Ctrl+Y)';
+    redoBtn.style.cssText = undoBtn.style.cssText;
+
+    // 호버 효과
+    [undoBtn, redoBtn].forEach(btn => {
+      btn.addEventListener('mouseenter', () => {
+        btn.style.background = '#e3f2fd';
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.background = 'white';
+      });
+    });
+
+    // 클릭 이벤트
+    undoBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const historyManager = getHistoryManager(editor);
+      historyManager.undo(editor);
+      updateUndoRedoUI(editor);
+    });
+
+    redoBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const historyManager = getHistoryManager(editor);
+      historyManager.redo(editor);
+      updateUndoRedoUI(editor);
+    });
+
+    container.appendChild(undoBtn);
+    container.appendChild(redoBtn);
+
+    // 에디터에 relative position 부여 (없으면)
+    const editorPosition = window.getComputedStyle(editor).position;
+    if (editorPosition === 'static') {
+      editor.style.position = 'relative';
+    }
+
+    editor.appendChild(container);
+    updateUndoRedoUI(editor);
+  }
+
+  // UI 버튼 상태 업데이트
+  function updateUndoRedoUI(editor) {
+    const container = editor.querySelector('.stove-undo-ui');
+    if (!container) return;
+
+    const historyManager = getHistoryManager(editor);
+    const undoBtn = container.querySelector('.stove-undo-btn');
+    const redoBtn = container.querySelector('.stove-redo-btn');
+
+    // Undo 버튼 상태
+    const canUndo = historyManager.currentIndex > 0;
+    undoBtn.style.opacity = canUndo ? '1' : '0.3';
+    undoBtn.style.cursor = canUndo ? 'pointer' : 'not-allowed';
+    undoBtn.disabled = !canUndo;
+
+    // Redo 버튼 상태
+    const canRedo = historyManager.currentIndex < historyManager.history.length - 1;
+    redoBtn.style.opacity = canRedo ? '1' : '0.3';
+    redoBtn.style.cursor = canRedo ? 'pointer' : 'not-allowed';
+    redoBtn.disabled = !canRedo;
   }
 
   // 에디터 정리 (메모리 누수 방지)
@@ -262,6 +390,12 @@ function startExtension() {
     if (!editor.dataset.undoEnabled) return;
 
     console.log(`에디터 정리 중: ${editor.dataset.undoId}`);
+
+    // UI 제거
+    const uiContainer = editor.querySelector('.stove-undo-ui');
+    if (uiContainer) {
+      uiContainer.remove();
+    }
 
     // 타임아웃 정리
     const timeout = editorTimeouts.get(editor);
@@ -338,6 +472,9 @@ function startExtension() {
     const historyManager = getHistoryManager(editor);
     console.log(`스토브 에디터 실행취소 기능 활성화됨 (ID: ${editor.dataset.undoId})`);
 
+    // UI 버튼 생성
+    createUndoRedoUI(editor);
+
     // 초기 상태 저장 (편집 모드에서 컨텐츠가 로드될 시간을 주기 위해 지연)
     setTimeout(() => {
       // 에디터가 여전히 DOM에 존재하는지 확인
@@ -345,6 +482,7 @@ function startExtension() {
         try {
           const initialContent = historyManager.getContent(editor);
           historyManager.saveState(initialContent, editor);
+          updateUndoRedoUI(editor);
         } catch (error) {
           console.error('초기 상태 저장 실패:', error);
         }
@@ -358,7 +496,8 @@ function startExtension() {
       saveTimeout = setTimeout(() => {
         const content = historyManager.getContent(editor);
         historyManager.saveState(content, editor);
-      }, 100);
+        updateUndoRedoUI(editor);
+      }, settings.debounceTime);
       editorTimeouts.set(editor, saveTimeout);
     };
 

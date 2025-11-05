@@ -2,6 +2,7 @@
 const toggleSwitch = document.getElementById('toggleSwitch');
 const statusElement = document.getElementById('status');
 const reloadNotice = document.getElementById('reloadNotice');
+const settingsBtn = document.getElementById('settingsBtn');
 
 // 저장된 설정 불러오기
 chrome.storage.sync.get(['enabled'], (result) => {
@@ -40,3 +41,8 @@ function showReloadNotice() {
         reloadNotice.classList.remove('show');
     }, 5000);
 }
+
+// 설정 페이지 열기
+settingsBtn.addEventListener('click', () => {
+    chrome.runtime.openOptionsPage();
+});
