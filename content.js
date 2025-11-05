@@ -3,7 +3,7 @@ class EditorHistoryManager {
   constructor() {
     this.history = [];
     this.currentIndex = -1;
-    this.maxHistorySize = 50;
+    this.maxHistorySize = 150;
     this.lastContent = '';
     this.isUndoing = false;
     this.isRedoing = false;
@@ -186,7 +186,7 @@ function startExtension() {
       saveTimeout = setTimeout(() => {
         const content = historyManager.getContent(editor);
         historyManager.saveState(content, editor);
-      }, 300);
+      }, 100);
     };
 
     editor.addEventListener('input', handleInput);
