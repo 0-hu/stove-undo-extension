@@ -1,53 +1,69 @@
 // 토스트 알림 표시 함수
 function showToast(message, type = 'info') {
-  // 기존 토스트가 있으면 제거
-  const existingToast = document.getElementById('stove-undo-toast');
-  if (existingToast) {
-    existingToast.remove();
+  // document.body가 없으면 대기
+  if (!document.body) {
+    setTimeout(() => showToast(message, type), 100);
+    return;
   }
 
-  const toast = document.createElement('div');
-  toast.id = 'stove-undo-toast';
-  toast.textContent = message;
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    background-color: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#007bff'};
-    color: white;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    z-index: 999999;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 14px;
-    animation: slideIn 0.3s ease-out;
-  `;
+  try {
+    // 기존 토스트가 있으면 제거
+    const existingToast = document.getElementById('stove-undo-toast');
+    if (existingToast) {
+      existingToast.remove();
+    }
 
-  // 애니메이션 CSS 추가
-  if (!document.getElementById('stove-undo-toast-style')) {
-    const style = document.createElement('style');
-    style.id = 'stove-undo-toast-style';
-    style.textContent = `
-      @keyframes slideIn {
-        from { transform: translateX(400px); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      @keyframes slideOut {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(400px); opacity: 0; }
-      }
+    const toast = document.createElement('div');
+    toast.id = 'stove-undo-toast';
+    toast.textContent = message;
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background-color: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#007bff'};
+      color: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 999999;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      animation: slideIn 0.3s ease-out;
     `;
-    document.head.appendChild(style);
+
+    // 애니메이션 CSS 추가
+    if (!document.getElementById('stove-undo-toast-style')) {
+      const style = document.createElement('style');
+      style.id = 'stove-undo-toast-style';
+      style.textContent = `
+        @keyframes slideIn {
+          from { transform: translateX(400px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(400px); opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    document.body.appendChild(toast);
+
+    // 3초 후 제거
+    setTimeout(() => {
+      if (toast && toast.parentNode) {
+        toast.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => {
+          if (toast && toast.parentNode) {
+            toast.remove();
+          }
+        }, 300);
+      }
+    }, 3000);
+  } catch (error) {
+    console.error('토스트 표시 실패:', error);
   }
-
-  document.body.appendChild(toast);
-
-  // 3초 후 제거
-  setTimeout(() => {
-    toast.style.animation = 'slideOut 0.3s ease-out';
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
 }
 
 // 히스토리 관리를 위한 클래스
@@ -287,13 +303,26 @@ function startExtension() {
       '#editor'
     ];
 
-    for (const selector of selectors) {
-      const elements = document.querySelectorAll(selector);
-      if (elements.length > 0) {
-        return Array.from(elements);
+    // 모든 선택자에서 찾은 에디터를 수집
+    const allEditors = [];
+    const seen = new Set();
+
+    selectors.forEach(selector => {
+      try {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(element => {
+          // 중복 제거 (같은 요소가 여러 선택자에 매칭될 수 있음)
+          if (!seen.has(element)) {
+            seen.add(element);
+            allEditors.push(element);
+          }
+        });
+      } catch (e) {
+        console.warn(`선택자 실행 실패: ${selector}`, e);
       }
-    }
-    return [];
+    });
+
+    return allEditors;
   }
 
   // 에디터에 이벤트 리스너 추가
@@ -311,8 +340,15 @@ function startExtension() {
 
     // 초기 상태 저장 (편집 모드에서 컨텐츠가 로드될 시간을 주기 위해 지연)
     setTimeout(() => {
-      const initialContent = historyManager.getContent(editor);
-      historyManager.saveState(initialContent, editor);
+      // 에디터가 여전히 DOM에 존재하는지 확인
+      if (document.contains(editor) && editor.dataset.undoEnabled) {
+        try {
+          const initialContent = historyManager.getContent(editor);
+          historyManager.saveState(initialContent, editor);
+        } catch (error) {
+          console.error('초기 상태 저장 실패:', error);
+        }
+      }
     }, 500);
 
     // 입력 이벤트 리스너
@@ -382,11 +418,10 @@ function startExtension() {
   // DOM 변경 감시 (document.body가 준비된 후에만)
   function startObserver() {
     if (document.body) {
-      const observer = new MutationObserver((mutations) => {
-        // 새 에디터 감지
-        checkForEditors();
+      let checkTimeout = null;
 
-        // 제거된 에디터 감지 및 정리
+      const observer = new MutationObserver((mutations) => {
+        // 제거된 에디터 감지 및 정리 (즉시 처리)
         mutations.forEach(mutation => {
           mutation.removedNodes.forEach(node => {
             // 제거된 노드가 에디터인지 확인
@@ -400,6 +435,10 @@ function startExtension() {
             }
           });
         });
+
+        // 새 에디터 감지 (debounce 적용)
+        clearTimeout(checkTimeout);
+        checkTimeout = setTimeout(checkForEditors, 300);
       });
 
       observer.observe(document.body, {
