@@ -204,6 +204,34 @@
         </div>
 
         <div class="info-section">
+            <h3>📜 히스토리 타임라인</h3>
+            <button id="refreshHistoryBtn" style="
+                width: 100%;
+                padding: 8px;
+                margin-bottom: 10px;
+                background: #007bff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 13px;
+            ">🔄 히스토리 불러오기</button>
+            <div id="historyTimeline" style="
+                max-height: 200px;
+                overflow-y: auto;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 8px;
+                background: #f9f9f9;
+                display: none;
+            ">
+                <p style="text-align: center; color: #666; margin: 20px 0;">
+                    활성 에디터의 히스토리가 여기에 표시됩니다
+                </p>
+            </div>
+        </div>
+
+        <div class="info-section">
             <h3>📌 사용법</h3>
             <ul>
                 <li><strong>Ctrl+Z</strong>: 실행취소</li>

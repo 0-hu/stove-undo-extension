@@ -75,6 +75,8 @@ class EditorHistoryManager {
     this.lastContent = '';
     this.isUndoing = false;
     this.isRedoing = false;
+    this.maxContentSize = 100 * 1024; // 100KB
+    this.warningShown = false; // 경고 한 번만 표시
   }
 
   saveState(content, element) {
@@ -82,6 +84,27 @@ class EditorHistoryManager {
     if (content === this.lastContent) return;
 
     try {
+      // 콘텐츠 크기 체크
+      const contentSize = new Blob([content]).size;
+
+      // 대용량 콘텐츠 경고 (한 번만)
+      if (contentSize > this.maxContentSize && !this.warningShown) {
+        const sizeMB = (contentSize / 1024 / 1024).toFixed(2);
+        console.warn(`대용량 콘텐츠 감지: ${sizeMB}MB`);
+        showToast(`⚠️ 대용량 콘텐츠(${sizeMB}MB) - 실행취소 성능이 저하될 수 있습니다`, 'info');
+        this.warningShown = true;
+
+        // 대용량의 경우 히스토리 크기를 더 작게 제한
+        if (this.history.length > 30) {
+          // 오래된 항목부터 제거하여 30개로 제한
+          const removeCount = this.history.length - 30;
+          this.history.splice(0, removeCount);
+          this.currentIndex -= removeCount;
+          if (this.currentIndex < 0) this.currentIndex = 0;
+          console.log(`대용량 콘텐츠: 히스토리 30개로 제한`);
+        }
+      }
+
       // 현재 인덱스 이후의 히스토리 제거
       this.history = this.history.slice(0, this.currentIndex + 1);
 
@@ -261,6 +284,7 @@ function startExtension() {
   const editorHistoryMap = new WeakMap();
   const editorTimeouts = new WeakMap();
   const editorListeners = new WeakMap(); // 이벤트 리스너 추적용
+  const editorLastContent = new WeakMap(); // 마지막 콘텐츠 추적 (스마트 저장용)
   let activeEditor = null;
   let editorIdCounter = 0;
 
@@ -414,6 +438,9 @@ function startExtension() {
       editorListeners.delete(editor);
     }
 
+    // 마지막 콘텐츠 정리
+    editorLastContent.delete(editor);
+
     // 활성 에디터 초기화
     if (activeEditor === editor) {
       activeEditor = null;
@@ -482,6 +509,7 @@ function startExtension() {
         try {
           const initialContent = historyManager.getContent(editor);
           historyManager.saveState(initialContent, editor);
+          editorLastContent.set(editor, initialContent); // 초기 콘텐츠 저장
           updateUndoRedoUI(editor);
         } catch (error) {
           console.error('초기 상태 저장 실패:', error);
@@ -489,15 +517,40 @@ function startExtension() {
       }
     }, 500);
 
-    // 입력 이벤트 리스너
-    const handleInput = () => {
+    // 스마트 입력 이벤트 리스너
+    const handleInput = (event) => {
+      const currentContent = historyManager.getContent(editor);
+      const lastContent = editorLastContent.get(editor) || '';
+
+      // 변경 크기 계산
+      const changeDelta = Math.abs(currentContent.length - lastContent.length);
+
+      // 동적 debounce 시간 결정
+      let debounceTime = settings.debounceTime;
+
+      // 대량 변경 (100자 이상) = 즉시 저장
+      if (changeDelta >= 100) {
+        debounceTime = 0;
+        console.log(`대량 변경 감지 (${changeDelta}자) - 즉시 저장`);
+      }
+      // 붙여넣기/잘라내기 이벤트 = 즉시 저장
+      else if (event && (event.type === 'paste' || event.type === 'cut')) {
+        debounceTime = 0;
+        console.log(`${event.type} 이벤트 - 즉시 저장`);
+      }
+      // 일반 타이핑 = 설정된 debounce 시간
+      else {
+        debounceTime = settings.debounceTime;
+      }
+
       let saveTimeout = editorTimeouts.get(editor);
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
         const content = historyManager.getContent(editor);
         historyManager.saveState(content, editor);
+        editorLastContent.set(editor, content); // 마지막 콘텐츠 업데이트
         updateUndoRedoUI(editor);
-      }, settings.debounceTime);
+      }, debounceTime);
       editorTimeouts.set(editor, saveTimeout);
     };
 
@@ -592,6 +645,51 @@ function startExtension() {
 
   // 주기적 체크 (일부 동적 에디터 대응)
   setInterval(checkForEditors, 2000);
+
+  // 팝업에서 히스토리 요청 처리
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === 'GET_HISTORY') {
+      if (activeEditor) {
+        const historyManager = getHistoryManager(activeEditor);
+        const historyData = {
+          editorId: activeEditor.dataset.undoId,
+          currentIndex: historyManager.currentIndex,
+          history: historyManager.history.map((state, index) => ({
+            index: index,
+            timestamp: state.timestamp,
+            preview: state.content.substring(0, 100).replace(/<[^>]*>/g, ''), // HTML 태그 제거
+            isCurrent: index === historyManager.currentIndex
+          }))
+        };
+        sendResponse({ success: true, data: historyData });
+      } else {
+        sendResponse({ success: false, message: '활성 에디터가 없습니다' });
+      }
+      return true; // 비동기 응답을 위해 true 반환
+    }
+
+    if (request.type === 'JUMP_TO_HISTORY') {
+      if (activeEditor && request.index !== undefined) {
+        const historyManager = getHistoryManager(activeEditor);
+        const targetIndex = request.index;
+
+        if (targetIndex >= 0 && targetIndex < historyManager.history.length) {
+          // 현재 인덱스에서 목표 인덱스로 이동
+          historyManager.currentIndex = targetIndex;
+          const state = historyManager.history[targetIndex];
+          historyManager.restoreContent(activeEditor, state);
+          historyManager.lastContent = state.content;
+          updateUndoRedoUI(activeEditor);
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, message: '잘못된 히스토리 인덱스' });
+        }
+      } else {
+        sendResponse({ success: false, message: '활성 에디터가 없습니다' });
+      }
+      return true;
+    }
+  });
 }
 
 // 페이지 로드 완료 후 실행
